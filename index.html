@@ -1,0 +1,412 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Sparkles, 
+  Moon, 
+  Sun, 
+  Compass, 
+  Star, 
+  MessageSquare, 
+  Info, 
+  ChevronRight, 
+  Loader2, 
+  RefreshCw, 
+  Search, 
+  Users, 
+  LayoutGrid, 
+  Type, 
+  ArrowLeft, 
+  Share2, 
+  Lightbulb 
+} from 'lucide-react';
+
+const apiKey = ""; // Environment provides this
+
+// Three.js Background Component with high-density stars
+const SpaceBackground = () => {
+  const mountRef = useRef(null);
+
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+    script.onload = () => {
+      const THREE = window.THREE;
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      if (mountRef.current) mountRef.current.appendChild(renderer.domElement);
+
+      const starGeometry = new THREE.BufferGeometry();
+      const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.8 });
+      const starVertices = [];
+      for (let i = 0; i < 12000; i++) {
+        const x = (Math.random() - 0.5) * 2000;
+        const y = (Math.random() - 0.5) * 2000;
+        const z = -Math.random() * 2000;
+        starVertices.push(x, y, z);
+      }
+      starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+      const stars = new THREE.Points(starGeometry, starMaterial);
+      scene.add(stars);
+
+      camera.position.z = 1;
+      let mouseX = 0, mouseY = 0;
+      window.addEventListener('mousemove', (e) => {
+        mouseX = (e.clientX - window.innerWidth / 2) / 150;
+        mouseY = (e.clientY - window.innerHeight / 2) / 150;
+      });
+
+      const animate = () => {
+        requestAnimationFrame(animate);
+        stars.rotation.y += 0.0004;
+        camera.position.x += (mouseX - camera.position.x) * 0.05;
+        camera.position.y += (-mouseY - camera.position.y) * 0.05;
+        camera.lookAt(scene.position);
+        renderer.render(scene, camera);
+      };
+      animate();
+    };
+    document.head.appendChild(script);
+  }, []);
+
+  return <div ref={mountRef} className="fixed inset-0 z-0 pointer-events-none" />;
+};
+
+const ZODIAC_SIGNS = [
+  { name: 'Aries', date: 'Mar 21 - Apr 19', element: 'Fire', color: 'from-orange-500 to-red-600' },
+  { name: 'Taurus', date: 'Apr 20 - May 20', element: 'Earth', color: 'from-emerald-500 to-green-700' },
+  { name: 'Gemini', date: 'May 21 - Jun 20', element: 'Air', color: 'from-yellow-400 to-amber-500' },
+  { name: 'Cancer', date: 'Jun 21 - Jul 22', element: 'Water', color: 'from-blue-400 to-indigo-500' },
+  { name: 'Leo', date: 'Jul 23 - Aug 22', element: 'Fire', color: 'from-yellow-500 to-orange-600' },
+  { name: 'Virgo', date: 'Aug 23 - Sep 22', element: 'Earth', color: 'from-stone-500 to-lime-700' },
+  { name: 'Libra', date: 'Sep 23 - Oct 22', element: 'Air', color: 'from-pink-400 to-rose-500' },
+  { name: 'Scorpio', date: 'Oct 23 - Nov 21', element: 'Water', color: 'from-purple-600 to-indigo-900' },
+  { name: 'Sagittarius', date: 'Nov 22 - Dec 21', element: 'Fire', color: 'from-blue-600 to-purple-600' },
+  { name: 'Capricorn', date: 'Dec 22 - Jan 19', element: 'Earth', color: 'from-gray-600 to-slate-900' },
+  { name: 'Aquarius', date: 'Jan 20 - Feb 18', element: 'Air', color: 'from-cyan-400 to-blue-500' },
+  { name: 'Pisces', date: 'Feb 19 - Mar 20', element: 'Water', color: 'from-teal-400 to-blue-600' },
+];
+
+export default function App() {
+  const [view, setView] = useState('home'); 
+  const [selectedSign, setSelectedSign] = useState(null);
+  const [secondSign, setSecondSign] = useState(null);
+  const [userName, setUserName] = useState("");
+  const [partnerName, setPartnerName] = useState("");
+  const [reading, setReading] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [cache, setCache] = useState({});
+
+  const fetchCelestialData = async (prompt, systemPrompt, cacheKey) => {
+    if (cache[cacheKey]) {
+      setReading(cache[cacheKey]);
+      return;
+    }
+
+    setLoading(true);
+    setReading("");
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          systemInstruction: { parts: [{ text: systemPrompt }] }
+        })
+      });
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      if (text) {
+        setCache(prev => ({ ...prev, [cacheKey]: text }));
+        setReading(text);
+      }
+    } catch (err) {
+      setReading("The stars are hidden behind clouds. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleHoroscope = (sign) => {
+    setSelectedSign(sign);
+    setView('horoscope_detail');
+    fetchCelestialData(
+      `Give a good, clear explanation of today's horoscope for ${sign.name} (${sign.element} sign). Write exactly two paragraphs using very simple, general English.`,
+      "Professional but simple Astrologer. Provide a good explanation in exactly two paragraphs. Use easy words only.",
+      `horo-${sign.name}`
+    );
+  };
+
+  const handleCompatibility = () => {
+    if (!selectedSign || !secondSign) return;
+    fetchCelestialData(
+      `Analyze the horoscope match between ${selectedSign.name} and ${secondSign.name} with a good explanation. Write exactly two paragraphs in simple English. Explain how they connect and what their strengths are.`,
+      "Relationship guide. Provide a good, detailed but simple explanation in two paragraphs. No complicated jargon.",
+      `comp-${selectedSign.name}-${secondSign.name}`
+    );
+  };
+
+  const handleNameMatch = (e) => {
+    e.preventDefault();
+    const u = userName.trim();
+    const p = partnerName.trim();
+    if (!u || !p) return;
+    fetchCelestialData(
+      `Provide a good explanation of the connection between '${u}' and '${p}' based on the energy of their names. Write exactly two paragraphs in simple, general English. Do not mention any famous people or celebrities.`,
+      "Connection expert. Focus only on the two names given. Write two paragraphs using simple English for a clear explanation.",
+      `namematch-${u}-${p}`
+    );
+  };
+
+  const handleAdvice = () => {
+    const card = ["Strength", "New Path", "Balance", "Wisdom", "Action"][Math.floor(Math.random() * 5)];
+    fetchCelestialData(
+      `Provide a good explanation of daily life advice based on the theme of '${card}'. Write exactly two paragraphs using simple English.`,
+      "Life guide. Give clear, simple advice in two paragraphs with a good explanation.",
+      `advice-${card}`
+    );
+  };
+
+  const handleNameAstrology = (e) => {
+    e.preventDefault();
+    if (!userName.trim()) return;
+    fetchCelestialData(
+      `Provide a good explanation of the future destiny for the person named '${userName}'. Write exactly two paragraphs in simple, general English.`,
+      "Destiny teller. Explain the life path clearly and simply in exactly two paragraphs.",
+      `destiny-${userName}`
+    );
+  };
+
+  const resetState = (newView) => {
+    setView(newView);
+    setSelectedSign(null);
+    setSecondSign(null);
+    setReading("");
+    setUserName("");
+    setPartnerName("");
+  };
+
+  return (
+    <div className="min-h-screen bg-[#020205] text-white font-sans selection:bg-purple-500/50 relative overflow-x-hidden">
+      <SpaceBackground />
+      
+      {/* nebula overlays */}
+      <div className="fixed inset-0 pointer-events-none opacity-25 z-0">
+        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_20%_20%,_rgba(99,102,241,0.2),transparent_50%)]" />
+        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_80%_80%,_rgba(168,85,247,0.2),transparent_50%)]" />
+      </div>
+
+      <nav className="sticky top-0 z-50 backdrop-blur-3xl border-b border-white/10 bg-black/70 shadow-xl">
+        <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
+          <button onClick={() => resetState('home')} className="flex items-center gap-3 active:scale-95 transition-transform">
+            <div className="p-2 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-xl shadow-[0_0_15px_rgba(99,102,241,0.4)]">
+              <Sparkles size={24} className="text-white" />
+            </div>
+            <span className="text-xl font-black hidden sm:block tracking-tight uppercase">Zodiac Echoes</span>
+          </button>
+          
+          <div className="flex gap-2 sm:gap-4 overflow-x-auto no-scrollbar scroll-smooth px-2">
+            {[
+              { id: 'home', icon: LayoutGrid, label: 'Horoscopes' },
+              { id: 'compatibility', icon: Users, label: 'Horoscope Match' },
+              { id: 'name_match', icon: Share2, label: 'Connection Match' },
+              { id: 'advice', icon: Lightbulb, label: 'Daily Advice' },
+              { id: 'name_astrology', icon: Type, label: 'Know Your Future' }
+            ].map(tab => (
+              <button 
+                key={tab.id} 
+                onClick={() => resetState(tab.id)} 
+                className={`p-2 px-3 rounded-lg text-sm flex items-center gap-2 transition-all whitespace-nowrap font-bold ${view.includes(tab.id) ? 'text-purple-400 bg-purple-400/20 shadow-inner' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+              >
+                <tab.icon size={18} />
+                <span className="hidden md:inline">{tab.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </nav>
+
+      <main className="max-w-6xl mx-auto px-6 py-12 relative z-10">
+        {view === 'home' && (
+          <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
+            <header className="text-center mb-16">
+              <h1 className="text-5xl font-black mb-4 drop-shadow-2xl">Daily Horoscopes</h1>
+              <p className="text-slate-300 font-medium text-lg">Pick your sign to see your future path</p>
+            </header>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              {ZODIAC_SIGNS.map(sign => (
+                <button 
+                  key={sign.name} 
+                  onClick={() => handleHoroscope(sign)} 
+                  className="group bg-black/60 p-8 rounded-[2.5rem] border border-white/10 hover:border-purple-500/50 transition-all hover:-translate-y-2 shadow-2xl backdrop-blur-md active:scale-95"
+                >
+                  <div className={`w-14 h-14 mx-auto mb-4 rounded-2xl bg-gradient-to-br ${sign.color} flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-all`}>
+                    <Star size={24} />
+                  </div>
+                  <h3 className="text-lg font-bold text-white">{sign.name}</h3>
+                  <p className="text-[10px] uppercase text-slate-500 font-black tracking-widest mt-1">{sign.date}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {view === 'compatibility' && (
+          <div className="max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4">
+            <Users size={64} className="mx-auto text-purple-500 mb-6 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]" />
+            <h1 className="text-4xl font-black text-center mb-12">Horoscope Match</h1>
+            <div className="grid md:grid-cols-2 gap-8 mb-12">
+              <SelectSign label="First Sign" sign={selectedSign} setSign={setSelectedSign} />
+              <SelectSign label="Second Sign" sign={secondSign} setSign={setSecondSign} />
+            </div>
+            <button 
+              onClick={handleCompatibility} 
+              disabled={loading || !selectedSign || !secondSign} 
+              className="w-full py-6 bg-indigo-600 rounded-[2.5rem] font-black text-xl hover:bg-indigo-500 hover:shadow-[0_0_20px_rgba(79,70,229,0.4)] disabled:opacity-30 transition-all active:scale-95"
+            >
+              {loading ? <Loader2 className="animate-spin mx-auto" /> : "Check Compatibility"}
+            </button>
+            {reading && <ResultCard title="Celestial Alignment" text={reading} />}
+          </div>
+        )}
+
+        {view === 'name_match' && (
+          <div className="max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4">
+            <Share2 size={64} className="mx-auto text-pink-500 mb-6 drop-shadow-[0_0_10px_rgba(236,72,153,0.5)]" />
+            <h1 className="text-4xl font-black text-center mb-12">Connection Match</h1>
+            <form onSubmit={handleNameMatch} className="space-y-8">
+              <div className="grid md:grid-cols-2 gap-6">
+                <InputBox placeholder="First Person's Name" value={userName} onChange={setUserName} />
+                <InputBox placeholder="Second Person's Name" value={partnerName} onChange={setPartnerName} />
+              </div>
+              <button 
+                type="submit" 
+                disabled={loading || !userName || !partnerName} 
+                className="w-full py-6 bg-pink-600 rounded-[2.5rem] font-black text-xl hover:bg-pink-500 hover:shadow-[0_0_20px_rgba(219,39,119,0.4)] disabled:opacity-30 transition-all active:scale-95"
+              >
+                {loading ? <Loader2 className="animate-spin mx-auto" /> : "Reveal Connection"}
+              </button>
+            </form>
+            {reading && <ResultCard title={`Bond Analysis`} text={reading} />}
+          </div>
+        )}
+
+        {view === 'advice' && (
+          <div className="max-w-2xl mx-auto text-center animate-in zoom-in-95">
+            <Lightbulb size={64} className="mx-auto text-yellow-400 mb-6 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]" />
+            <h1 className="text-4xl font-black mb-12">Daily Advice</h1>
+            <button 
+              onClick={handleAdvice} 
+              className="w-64 h-80 mx-auto rounded-[3.5rem] border-4 border-dashed border-white/20 flex flex-col items-center justify-center gap-4 hover:border-yellow-400 transition-all hover:bg-white/5 group shadow-2xl active:scale-95"
+            >
+              <Sparkles size={48} className="text-yellow-400 group-hover:scale-125 group-hover:rotate-12 transition-transform duration-500" />
+              <span className="font-black uppercase tracking-[0.3em] text-sm">Draw Advice</span>
+            </button>
+            {loading && <div className="mt-8 animate-pulse italic text-yellow-200">Consulting wisdom...</div>}
+            {reading && <ResultCard title="Today's Guidance" text={reading} />}
+          </div>
+        )}
+
+        {view === 'name_astrology' && (
+          <div className="max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4">
+            <Type size={64} className="mx-auto text-emerald-500 mb-6 drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+            <h1 className="text-4xl font-black text-center mb-12">Know Your Future</h1>
+            <form onSubmit={handleNameAstrology} className="relative">
+              <InputBox placeholder="Enter your full name..." value={userName} onChange={setUserName} />
+              <button 
+                type="submit" 
+                disabled={loading || !userName} 
+                className="absolute right-3 top-3 bottom-3 px-8 bg-emerald-500 text-black font-black rounded-2xl hover:bg-emerald-400 disabled:opacity-30 transition-all active:scale-95 shadow-lg"
+              >
+                Go
+              </button>
+            </form>
+            {loading && <div className="mt-8 text-center animate-pulse text-emerald-200">Reading life path...</div>}
+            {reading && <ResultCard title={`Future for ${userName}`} text={reading} />}
+          </div>
+        )}
+
+        {view === 'horoscope_detail' && (
+          <div className="max-w-2xl mx-auto animate-in slide-in-from-right-12 duration-500">
+            <button onClick={() => resetState('home')} className="mb-8 flex items-center gap-2 bg-white/10 py-2 px-6 rounded-full font-bold hover:bg-white/20 transition-all border border-white/10">
+              <ArrowLeft size={18} /> Back to Heavens
+            </button>
+            <div className="bg-black/80 p-10 md:p-14 rounded-[3.5rem] border-2 border-white/10 backdrop-blur-3xl shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+              <div className="flex justify-between items-center mb-12">
+                <div>
+                  <h2 className="text-5xl font-black tracking-tighter">{selectedSign?.name}</h2>
+                  <p className="text-slate-400 uppercase tracking-[0.4em] font-black text-xs mt-3">{selectedSign?.date}</p>
+                </div>
+                <div className={`w-20 h-20 rounded-3xl bg-gradient-to-br ${selectedSign?.color} flex items-center justify-center shadow-[0_10px_30px_rgba(0,0,0,0.5)] rotate-6 transition-transform hover:rotate-0 duration-500`}>
+                  <Star size={40} className="text-white" />
+                </div>
+              </div>
+              {loading ? (
+                <div className="py-20 flex justify-center"><Loader2 className="animate-spin text-purple-500" size={48} /></div>
+              ) : (
+                <div className="text-xl leading-relaxed text-slate-100 whitespace-pre-wrap font-medium">
+                  {reading}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </main>
+
+      <footer className="max-w-6xl mx-auto px-6 py-20 border-t border-white/5 text-center relative z-10">
+        <p className="text-slate-500 text-sm font-black tracking-[0.8em] uppercase opacity-50">Celestial Labs 3D © 2025</p>
+      </footer>
+    </div>
+  );
+}
+
+// UI HELPERS
+function SelectSign({ label, sign, setSign }) {
+  return (
+    <div className="space-y-4">
+      <label className="text-xs font-black uppercase tracking-[0.3em] text-slate-500 pl-3">{label}</label>
+      <select 
+        className="w-full bg-black/90 text-white border-2 border-white/20 rounded-[1.8rem] p-5 focus:border-purple-500 outline-none font-bold text-lg transition-all cursor-pointer hover:bg-black/70 shadow-xl" 
+        value={sign?.name || ""} 
+        onChange={(e) => setSign(ZODIAC_SIGNS.find(s => s.name === e.target.value))}
+      >
+        <option value="" disabled>Select sign...</option>
+        {ZODIAC_SIGNS.map(s => <option key={s.name} value={s.name} className="bg-black">{s.name}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function InputBox({ placeholder, value, onChange }) {
+  return (
+    <input 
+      type="text" 
+      placeholder={placeholder} 
+      className="w-full bg-black/90 text-white border-2 border-white/20 rounded-[1.8rem] p-5 focus:border-pink-500 outline-none font-bold text-lg placeholder:text-slate-600 transition-all shadow-xl" 
+      value={value} 
+      onChange={(e) => onChange(e.target.value)} 
+    />
+  );
+}
+
+function ResultCard({ title, text }) {
+  return (
+    <div className="mt-12 bg-black/90 p-10 md:p-14 rounded-[3.5rem] border-2 border-white/10 backdrop-blur-3xl shadow-3xl animate-in fade-in slide-in-from-bottom-12 duration-1000">
+      <h3 className="text-sm font-black uppercase text-purple-400 mb-8 tracking-[0.5em] border-b border-white/10 pb-6">{title}</h3>
+      <div className="text-xl leading-relaxed text-slate-100 whitespace-pre-wrap font-medium">
+        {text}
+      </div>
+      <div className="mt-12 flex flex-col sm:flex-row gap-4">
+        <button className="p-5 bg-white/5 rounded-2xl hover:bg-purple-600 transition-all flex items-center justify-center hover:shadow-[0_0_15px_rgba(168,85,247,0.5)]">
+          <RefreshCw size={24} />
+        </button>
+        <button className="flex-1 bg-white/5 rounded-2xl font-black text-sm uppercase tracking-[0.2em] hover:bg-white/10 py-5 transition-all active:scale-95">
+          Save Insights
+        </button>
+      </div>
+    </div>
+  );
+}
